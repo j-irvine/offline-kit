@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Offline Kit</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%232f6b4f'/><path d='M9 8h10l4 4v12H9z' fill='none' stroke='white' stroke-width='2.2' stroke-linejoin='round'/><path d='M13 16h6M13 20h6' stroke='white' stroke-width='2.2' stroke-linecap='round'/></svg>">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">Offline Kit</div>
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="ask" class="tab active">Ask</button>
+    <button role="tab" data-tab="library" class="tab">Library</button>
+  </nav>
+  <div id="status" class="status" title="">
+    <span class="dot"></span><span id="status-text">Starting…</span>
+  </div>
+</header>
+
+<main>
+  <!-- ASK -->
+  <section id="tab-ask" class="panel active">
+    <aside class="history" id="history">
+      <button id="new-chat" class="btn primary wide">+ New chat</button>
+      <ul id="history-list"></ul>
+    </aside>
+    <div class="chat">
+      <div id="thread" class="thread">
+        <div id="welcome" class="welcome">
+          <h1>Ask anything</h1>
+          <p>Answers come from the offline library on this computer, with links to the articles they're based on.
+            The AI can make mistakes, so check the sources for anything important, especially medical or safety questions.</p>
+          <div class="examples">
+            <button class="example">How do I purify water from a stream?</button>
+            <button class="example">What are the signs of hypothermia and how do I treat it?</button>
+            <button class="example">How do I preserve vegetables without a fridge?</button>
+            <button class="example">How do I jump start a car?</button>
+          </div>
+        </div>
+      </div>
+      <form id="ask-form" class="composer">
+        <textarea id="question" rows="1" placeholder="Ask a question…" autofocus></textarea>
+        <div class="composer-row">
+          <label class="toggle" title="Look up the answer in the offline library first">
+            <input type="checkbox" id="use-library" checked> Search the library
+          </label>
+          <label class="toggle" title="Slower, but more careful on hard questions">
+            <input type="checkbox" id="think"> Think longer
+          </label>
+          <button type="submit" id="send" class="btn primary">Ask</button>
+          <button type="button" id="stop" class="btn" hidden>Stop</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- LIBRARY -->
+  <section id="tab-library" class="panel">
+    <div class="library">
+      <form id="search-form" class="searchbar">
+        <input id="search-q" type="search" placeholder="Search the library…" autocomplete="off">
+        <select id="search-book"><option value="">All collections</option></select>
+        <button class="btn primary">Search</button>
+      </form>
+      <ul id="suggestions" class="suggestions" hidden></ul>
+      <div id="search-results"></div>
+      <h2 class="section-title">Collections</h2>
+      <div id="books" class="books"></div>
+    </div>
+  </section>
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

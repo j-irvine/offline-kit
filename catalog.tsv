@@ -1,0 +1,57 @@
+# Offline Kit library catalog.
+#
+# Each line is one Kiwix collection (a .zim file). The installer looks up the
+# newest version of each one on download.kiwix.org, so this list doesn't go stale.
+#
+# Columns (tab-separated):
+#   tiers   which install sizes include it: E = Essentials, S = Standard, C = Complete
+#   dir     folder on https://download.kiwix.org/zim/
+#   prefix  file name without the trailing _YYYY-MM.zim
+#   title   short human name
+#   about   one-line description
+#
+# To add something: browse https://download.kiwix.org/zim/ and add a line.
+tiers	dir	prefix	title	about
+E	wikipedia	wikipedia_en_all_mini	Wikipedia (summaries)	Every English Wikipedia article, intro section only
+S	wikipedia	wikipedia_en_all_nopic	Wikipedia (full text)	Every English Wikipedia article in full, without images
+C	wikipedia	wikipedia_en_all_maxi	Wikipedia (complete)	Every English Wikipedia article in full, with images
+ESC	wikipedia	wikipedia_en_medicine_maxi	WikiMed	Medical Wikipedia, with images
+ESC	other	mdwiki_en_all_maxi	MDWiki	Medical reference written for health workers
+ESC	other	zimgit-post-disaster_en	Post-Disaster Resources	Shelter, sanitation, power, and rebuilding guides
+ESC	other	zimgit-water_en	Water	Finding, treating, and storing water
+ESC	other	zimgit-food-preparation_en	Food Preparation	Cooking and preserving food
+ESC	other	zimgit-medicine_en	Field Medicine	First aid and medicine guides
+ESC	other	zimgit-knots_en	Knots	How to tie knots
+ESC	ifixit	ifixit_en_all	iFixit	Repair guides for devices, vehicles, and household items
+ESC	other	appropedia_en_all_maxi	Appropedia	Appropriate technology and sustainable living
+ESC	stack_exchange	diy.stackexchange.com_en_all	DIY Q&A	Home improvement questions and answers
+ESC	stack_exchange	gardening.stackexchange.com_en_all	Gardening Q&A	Gardening and landscaping questions and answers
+ESC	stack_exchange	cooking.stackexchange.com_en_all	Cooking Q&A	Cooking questions and answers
+ESC	stack_exchange	outdoors.stackexchange.com_en_all	Outdoors Q&A	Camping, hiking, and wilderness questions and answers
+ESC	wikivoyage	wikivoyage_en_all_nopic	Wikivoyage	Travel and geography guide
+SC	other	trueprepper.com_en_all	TruePrepper	Emergency preparedness guides
+SC	other	energypedia_en_all_nopic	Energypedia	Off-grid and renewable energy
+SC	other	gardenology.org_en_all	Gardenology	Plant encyclopedia
+SC	other	wikivet.net_en_all_maxi	WikiVet	Veterinary reference
+SC	other	librepathology_en_all_maxi	LibrePathology	Pathology reference
+SC	other	theworldfactbook_en_all	World Factbook	Country reference
+S	wikibooks	wikibooks_en_all_nopic	Wikibooks	Open textbooks and how-to manuals
+SC	stack_exchange	mechanics.stackexchange.com_en_all	Car Mechanics Q&A	Vehicle maintenance and repair questions and answers
+SC	stack_exchange	bicycles.stackexchange.com_en_all	Bicycles Q&A	Bicycle repair and riding questions and answers
+SC	stack_exchange	ham.stackexchange.com_en_all	Ham Radio Q&A	Amateur radio questions and answers
+SC	stack_exchange	chemistry.stackexchange.com_en_all	Chemistry Q&A	Chemistry questions and answers
+SC	stack_exchange	biology.stackexchange.com_en_all	Biology Q&A	Biology questions and answers
+SC	stack_exchange	medicalsciences.stackexchange.com_en_all	Medical Sciences Q&A	Medicine and health questions and answers
+SC	stack_exchange	woodworking.stackexchange.com_en_all	Woodworking Q&A	Woodworking questions and answers
+SC	stack_exchange	homebrew.stackexchange.com_en_all	Homebrewing Q&A	Brewing and fermentation questions and answers
+SC	stack_exchange	pets.stackexchange.com_en_all	Pets Q&A	Animal care questions and answers
+SC	stack_exchange	engineering.stackexchange.com_en_all	Engineering Q&A	Engineering questions and answers
+SC	stack_exchange	earthscience.stackexchange.com_en_all	Earth Science Q&A	Weather and geology questions and answers
+SC	stack_exchange	sustainability.stackexchange.com_en_all	Sustainability Q&A	Sustainable living questions and answers
+C	wikibooks	wikibooks_en_all_maxi	Wikibooks (illustrated)	Open textbooks and how-to manuals, with images
+C	wiktionary	wiktionary_en_all_nopic	Wiktionary	English dictionary
+C	stack_exchange	electronics.stackexchange.com_en_all	Electronics Q&A	Electronics questions and answers
+C	stack_exchange	physics.stackexchange.com_en_all	Physics Q&A	Physics questions and answers
+C	other	wikispecies_en_all_nopic	Wikispecies	Catalog of living species
+C	gutenberg	gutenberg_en_lcc-s	Gutenberg: Agriculture	Public-domain books on farming, animal husbandry, and forestry
+C	gutenberg	gutenberg_en_lcc-t	Gutenberg: Technology	Public-domain books on engineering, building, and crafts
