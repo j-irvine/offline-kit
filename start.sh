@@ -15,6 +15,8 @@ cleanup() {
   printf '\nStopping Offline Kit...\n'
   kill "${PIDS[@]}" 2>/dev/null
   wait 2>/dev/null
+  # Ollama's model worker can outlive it; make sure it's gone so it frees memory.
+  pkill -f "$KIT/ollama/" 2>/dev/null
 }
 trap cleanup EXIT INT TERM HUP
 

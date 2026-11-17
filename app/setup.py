@@ -297,7 +297,7 @@ def index_pdfs():
     for zim in sorted(LIBRARY.glob("*.zim")):
         try:
             archive = Archive(zim)
-            if pdfindex.pdf_count(archive) and not pdfindex.index_file(LIBRARY, zim).exists():
+            if pdfindex.should_index(archive) and not pdfindex.index_file(LIBRARY, zim).exists():
                 say(f"Making the PDFs in {zim.name} searchable...")
                 pdfindex.build(archive, zim, LIBRARY, log=say)
         except Exception as e:

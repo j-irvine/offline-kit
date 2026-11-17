@@ -32,6 +32,23 @@ def pdf_count(archive):
     return int(m.group(1)) if m else 0
 
 
+def should_index(archive):
+    """Index PDFs only where they're a real part of the collection.
+
+    Skips huge collections (scanning millions of entries is slow) and ones where
+    PDFs are a rare extra, like the few dozen PDFs inside Wikipedia.
+    """
+    pdfs = pdf_count(archive)
+    if not pdfs or archive.all_entry_count > 1_000_000:
+        return False
+    try:
+        counter = bytes(archive.get_metadata("Counter")).decode()
+    except (KeyError, RuntimeError):
+        return False
+    html = sum(int(n) for n in re.findall(r"text/html[^=;]*=(\d+)", counter))
+    return pdfs * 200 >= html
+
+
 def index_file(library_dir, zim_path):
     return Path(library_dir) / ".pdfindex" / f"{Path(zim_path).stem}.v{INDEX_VERSION}.sqlite"
 

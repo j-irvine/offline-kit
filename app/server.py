@@ -102,7 +102,7 @@ class Library:
         log(f"library: {len(self.books)} collections")
         self.pdf = pdfindex.PdfSearch(self.books.values(), folder)
         missing = [b for b in self.books.values()
-                   if pdfindex.pdf_count(b.archive) and not pdfindex.index_file(folder, b.path).exists()]
+                   if pdfindex.should_index(b.archive) and not pdfindex.index_file(folder, b.path).exists()]
         if missing:
             threading.Thread(target=self._index_pdfs, args=(missing, folder), daemon=True).start()
 
@@ -378,22 +378,29 @@ def retrieve(library, question, queries, max_docs=16, word_budget=1800, per_doc=
         s += 1.5 * p["doc"]["prior"]
         p["score"] = s
 
-    # Pick the best passages, a few per article, within the word budget.
-    chosen, used, per = [], 0, defaultdict(int)
+    # Pick the best passages, a few per article, within the word budget. The same
+    # article often appears in several collections (Wikipedia, WikiMed, MDWiki), so
+    # articles are grouped by title and repeated text is skipped.
+    def norm_title(t):
+        return re.sub(r"\W+", " ", re.sub(r"\(page \d+\)$", "", t)).strip().lower()
+
+    chosen, used, per, seen_text = [], 0, defaultdict(int), set()
     for p in sorted(pool, key=lambda p: -p["score"]):
         if p["score"] <= 0.5:
             break
-        group = p["doc"].get("group") or p["doc"]["key"]  # all pages of one PDF count as one document
+        group = norm_title(p["doc"]["title"])  # all pages of one PDF count as one document
+        sig = re.sub(r"\W+", "", p["text"].lower())[:160]
         words = len(p["text"].split())
-        if per[group] >= per_doc or used + words > word_budget:
+        if per[group] >= per_doc or used + words > word_budget or sig in seen_text:
             continue
         chosen.append(p)
+        seen_text.add(sig)
         per[group] += 1
         used += words
     # Group passages into numbered sources, keeping the order they appear in the article.
     sources, index = [], {}
     for p in chosen:
-        key = p["doc"]["key"]
+        key = p["doc"]["title"].strip().lower()
         if key not in index:
             index[key] = len(sources)
             d = p["doc"]
