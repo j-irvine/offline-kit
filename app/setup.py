@@ -308,7 +308,7 @@ def index_pdfs():
 
 
 def make_launcher():
-    script = f'#!/bin/bash\nexec "{CODE}/start.sh"\n'
+    script = f'#!/bin/bash\nexec /bin/bash "{CODE}/start.sh"\n'
     targets = [KIT / "Offline Kit.command"]
     desktop = Path.home() / "Desktop"
     if desktop.is_dir():
