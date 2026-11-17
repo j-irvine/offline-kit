@@ -43,7 +43,7 @@ The installer checks your free space and recommends a size that fits.
 
 ## Use it
 
-Double-click **Offline Kit** on your Desktop. A Terminal window opens, then the app opens in your web browser.
+Double-click **Offline Kit** on your Desktop (the green icon with a book). A Terminal window opens, then the app opens in your web browser.
 
 - **Ask** tab: type a question the way you'd search Google. Answers include numbered links to the articles they came from. Click them to read the source.
 - **Library** tab: search and read everything directly, like a website.

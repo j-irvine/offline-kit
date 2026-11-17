@@ -127,9 +127,21 @@ function renderHistory() {
 }
 
 const welcomeEl = $("#welcome");
+// Keep the newest text in view while an answer streams in, until the reader
+// scrolls up. Scrolling back down near the bottom starts following again.
+const threadEl = $("#thread");
+let follow = true, lastTop = 0;
+threadEl.addEventListener("scroll", () => {
+  const top = threadEl.scrollTop, fromBottom = threadEl.scrollHeight - top - threadEl.clientHeight;
+  // Moving up while not at the very bottom is the reader. (Content that gets
+  // shorter also moves the scroll position up, but leaves it at the bottom.)
+  if (top < lastTop && fromBottom > 1) follow = false;
+  else if (fromBottom < 40) follow = true;
+  lastTop = top;
+});
 function scrollDown(force) {
-  const t = $("#thread");
-  if (force || t.scrollHeight - t.scrollTop - t.clientHeight < 160) t.scrollTop = t.scrollHeight;
+  if (force) follow = true;
+  if (follow) threadEl.scrollTop = threadEl.scrollHeight;
 }
 
 function addMessage(m) {

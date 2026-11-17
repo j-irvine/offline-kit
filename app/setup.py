@@ -307,6 +307,30 @@ def index_pdfs():
 # ---------------------------------------------------------------- launcher
 
 
+# Gives a file a custom Finder icon and hides its extension, using AppKit through
+# JavaScript for Automation (built into macOS, so nothing extra to install).
+SET_ICON_JS = """
+ObjC.import("AppKit");
+function run(argv) {
+  const [icon, file] = argv;
+  const image = $.NSImage.alloc.initWithContentsOfFile(icon);
+  const ok = $.NSWorkspace.sharedWorkspace.setIconForFileOptions(image, file, 0);
+  $.NSURL.fileURLWithPath(file).setResourceValueForKeyError(
+    $.NSNumber.numberWithBool(true), $.NSURLHasHiddenExtensionKey, null);
+  return ok;
+}
+"""
+
+
+def set_icon(path):
+    """Make the shortcut look like an app on the Desktop. Best effort: a plain icon still works."""
+    try:
+        subprocess.run(["osascript", "-l", "JavaScript", "-e", SET_ICON_JS, str(CODE / "app" / "icon.png"), str(path)],
+                       capture_output=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
 def make_launcher():
     script = f'#!/bin/bash\nexec /bin/bash "{CODE}/start.sh"\n'
     targets = [KIT / "Offline Kit.command"]
@@ -316,6 +340,7 @@ def make_launcher():
     for t in targets:
         t.write_text(script)
         t.chmod(t.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        set_icon(t)
     return targets[-1]
 
 
@@ -396,7 +421,7 @@ def main():
     if failed:
         say("These collections didn't finish downloading: " + ", ".join(failed))
         say("Run the installer again to retry them. Everything else is ready to use.")
-    say(f"To start Offline Kit, double-click \"{launcher.name}\" on your Desktop.")
+    say(f"To start Offline Kit, double-click \"{launcher.stem}\" (the green book icon) on your Desktop.")
     say("It works without the internet.")
 
 
