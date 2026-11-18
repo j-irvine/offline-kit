@@ -456,13 +456,11 @@ def set_icon(path):
 
 UPDATE_SCRIPT = """#!/bin/bash
 # Updates the Offline Kit program to the newest version. The library is not touched.
-# This only works if the repository is public; otherwise see "Update" in README.md.
 TMP="$(mktemp)"
 if curl -fsSL "https://raw.githubusercontent.com/{repo}/main/install.sh" -o "$TMP"; then
   bash "$TMP" --app-only
 else
   echo "Couldn't download the update. Check the internet connection."
-  echo "If the repository is private, follow the Update steps in README.md instead."
 fi
 rm -f "$TMP"
 """

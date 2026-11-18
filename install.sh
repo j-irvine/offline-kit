@@ -1,10 +1,10 @@
 #!/bin/bash
 # Offline Kit installer for macOS.
 #
-# Run it from a downloaded copy of the repository (see README.md):
-#   bash ~/Downloads/offline-kit-main/install.sh
-# If the repository is public, it can also be piped straight from GitHub:
+# Run it straight from GitHub (see README.md):
 #   curl -fsSL https://raw.githubusercontent.com/j-irvine/offline-kit/main/install.sh | bash
+# or from a downloaded copy of the repository:
+#   bash ~/Downloads/offline-kit-main/install.sh
 #
 # It is safe to run again: finished downloads are kept, partial ones resume.
 # Add --app-only to update just the program and leave the library as it is.
@@ -52,7 +52,7 @@ elif [ -z "$SRC_DIR" ]; then
   bold "Downloading the kit"
   TMP="$(mktemp -d)"
   curl -fsSL "https://github.com/$REPO/archive/refs/heads/$BRANCH.tar.gz" | tar xz -C "$TMP" \
-    || fail "couldn't download the kit. Check your internet connection. If the repository is private, download the ZIP from GitHub instead (see README.md)."
+    || fail "couldn't download the kit. Check your internet connection and try again."
   rm -rf "$KIT/kit" && mv "$TMP"/*/ "$KIT/kit" && rm -rf "$TMP"
 fi
 

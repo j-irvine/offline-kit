@@ -27,21 +27,19 @@ The installer checks your free space and recommends a size that fits.
 
 ## Install
 
-1. **Get access.** This repository is private. Make a free account at [github.com](https://github.com/signup), send your username to whoever shared this, and accept the invitation email from GitHub.
-2. **Download the kit.** On this page, click the green **Code** button, then **Download ZIP**. If your Downloads folder shows a `.zip` file instead of a folder, double-click it to unzip it. You should end up with a folder called `offline-kit-main` in Downloads.
-3. **Open Terminal.** Press <kbd>⌘ Command</kbd> + <kbd>Space</kbd>, type `Terminal`, and press <kbd>Return</kbd>.
-4. **Run the installer.** Copy this line, paste it into Terminal, and press <kbd>Return</kbd>:
+1. **Open Terminal.** Press <kbd>⌘ Command</kbd> + <kbd>Space</kbd>, type `Terminal`, and press <kbd>Return</kbd>.
+2. **Run the installer.** Copy this line, paste it into Terminal, and press <kbd>Return</kbd>:
 
    ```
-   bash ~/Downloads/offline-kit-main/install.sh
+   curl -fsSL https://raw.githubusercontent.com/j-irvine/offline-kit/main/install.sh | bash
    ```
 
-   If macOS asks whether Terminal can access your Downloads or Desktop folder, click **Allow**.
-5. When asked, type the number of the size you want and press <kbd>Return</kbd>.
-6. **Wait.** The download is large and can take a few hours. You can keep using your Mac, but keep it plugged in and leave the Terminal window open.
-   - **If it gets interrupted** (Wi-Fi drops, the Mac restarts, you close the window), paste the line from step 4 again. It continues where it left off.
-7. When it says **All set!**, you're done. You can delete the `offline-kit-main` folder and the ZIP from Downloads.
-   - If it says **Almost done** instead, it lists what didn't finish. Paste the line from step 4 again to retry those parts. What did download is ready to use.
+   If macOS asks whether Terminal can access your Desktop folder, click **Allow**.
+3. When asked, type the number of the size you want and press <kbd>Return</kbd>.
+4. **Wait.** The download is large and can take a few hours. You can keep using your Mac, but keep it plugged in and leave the Terminal window open.
+   - **If it gets interrupted** (Wi-Fi drops, the Mac restarts, you close the window), paste the line from step 2 again. It continues where it left off.
+5. When it says **All set!**, you're done.
+   - If it says **Almost done** instead, it lists what didn't finish. Paste the line from step 2 again to retry those parts. What did download is ready to use.
 
 ## Use it
 
@@ -65,16 +63,12 @@ Double-click **Offline Kit** on your Desktop (the green icon with a book). A Ter
 
 ## Update, change size, or remove
 
-- **Update the program** (quick, and your library is not touched): download the ZIP again (step 2), then paste this into Terminal:
+- **Update the program** (a few minutes, and your library is not touched): open the **OfflineKit** folder in your home folder and double-click **Update Offline Kit**. If that file isn't there yet, paste this into Terminal instead:
   ```
-  cd ~/Downloads && unzip -oq offline-kit-main.zip 2>/dev/null; bash "$(ls -dt offline-kit-main*/ | head -1)install.sh" --app-only
+  curl -fsSL https://raw.githubusercontent.com/j-irvine/offline-kit/main/install.sh | bash -s -- --app-only
   ```
-  It takes a few minutes. Nothing in the library is downloaded again, replaced or removed.
-  - If the repository is public, you can skip the ZIP. Double-click **Update Offline Kit** in the OfflineKit folder in your home folder, or paste:
-    ```
-    curl -fsSL https://raw.githubusercontent.com/j-irvine/offline-kit/main/install.sh | bash -s -- --app-only
-    ```
-- **Update the library** (about once a year): do the same without `--app-only` at the end. It downloads newer versions of the collections and removes the old ones. This can be a large download.
+  Nothing in the library is downloaded again, replaced or removed.
+- **Update the library** (about once a year): paste the install line from step 2 again. It downloads newer versions of the collections and removes the old ones. This can be a large download.
 - **Change size:** paste this into Terminal, with the size you want at the end (`essentials`, `standard` or `complete`):
   ```
   bash ~/OfflineKit/kit/install.sh --tier essentials
