@@ -8,6 +8,7 @@ Options:
   --tier essentials|standard|complete   skip the size question
   --model NAME                          use a specific Ollama model
   --yes                                 don't ask for confirmation
+  --app-only                            update the program only; leave the library as it is
 """
 
 import argparse
@@ -453,7 +454,24 @@ def set_icon(path):
         pass
 
 
+UPDATE_SCRIPT = """#!/bin/bash
+# Updates the Offline Kit program to the newest version. The library is not touched.
+# This only works if the repository is public; otherwise see "Update" in README.md.
+TMP="$(mktemp)"
+if curl -fsSL "https://raw.githubusercontent.com/{repo}/main/install.sh" -o "$TMP"; then
+  bash "$TMP" --app-only
+else
+  echo "Couldn't download the update. Check the internet connection."
+  echo "If the repository is private, follow the Update steps in README.md instead."
+fi
+rm -f "$TMP"
+"""
+
+
 def make_launcher():
+    updater = KIT / "Update Offline Kit.command"
+    updater.write_text(UPDATE_SCRIPT.format(repo=os.environ.get("OFFLINE_KIT_REPO", "j-irvine/offline-kit")))
+    updater.chmod(updater.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     script = f'#!/bin/bash\nexec /bin/bash "{CODE}/start.sh"\n'
     targets = [KIT / "Offline Kit.command"]
     desktop = Path.home() / "Desktop"
@@ -504,11 +522,43 @@ def choose_tier(rows, args, config, model_size):
         return recommended
 
 
+def update_app(config, model):
+    """Finish a program-only update: nothing in the library is downloaded, replaced or removed."""
+    model_error = None
+    try:
+        proc = start_ollama()
+        try:
+            if not model_present(model):
+                bold(f"Downloading the AI model ({model})")
+                model_error = pull_model(model)
+        finally:
+            if proc:
+                proc.send_signal(signal.SIGTERM)
+                try:
+                    proc.wait(timeout=20)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+    except (OSError, RuntimeError) as e:
+        model_error = str(e)
+    config.update(model=model)
+    CONFIG.write_text(json.dumps(config, indent=2))
+    index_pdfs()
+    launcher = make_launcher()
+    bold("Offline Kit has been updated." if not model_error else "Almost done.")
+    say("Your library was left exactly as it was.")
+    if model_error:
+        say(f"The AI model ({model}) isn't ready: {model_error}")
+        say("The library works without it, but the Ask tab won't. Run this again to retry.")
+    say(f"To start Offline Kit, double-click \"{launcher.stem}\" (the green book icon) on your Desktop.")
+    return 1 if model_error else 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--tier", choices=list(TIERS))
     ap.add_argument("--model")
     ap.add_argument("--yes", action="store_true")
+    ap.add_argument("--app-only", action="store_true")
     ap.add_argument("--skip-library", action="store_true", help=argparse.SUPPRESS)
     args = ap.parse_args()
 
@@ -520,6 +570,9 @@ def main():
     (KIT / "models").mkdir(parents=True, exist_ok=True)
     model, model_size = pick_model()
     model = args.model or config.get("model") or model
+
+    if args.app_only and config.get("tier") in TIERS and not args.tier:
+        return update_app(config, model)
 
     bold("Checking the Kiwix library for the latest versions...")
     catalog = read_catalog()

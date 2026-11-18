@@ -65,7 +65,16 @@ Double-click **Offline Kit** on your Desktop (the green icon with a book). A Ter
 
 ## Update, change size, or remove
 
-- **Update** (about once a year): download the ZIP again (step 2) and paste the install line again (step 4). It downloads only what's new and removes the old versions.
+- **Update the program** (quick, and your library is not touched): download the ZIP again (step 2), then paste this into Terminal:
+  ```
+  cd ~/Downloads && unzip -oq offline-kit-main.zip 2>/dev/null; bash "$(ls -dt offline-kit-main*/ | head -1)install.sh" --app-only
+  ```
+  It takes a few minutes. Nothing in the library is downloaded again, replaced or removed.
+  - If the repository is public, you can skip the ZIP. Double-click **Update Offline Kit** in the OfflineKit folder in your home folder, or paste:
+    ```
+    curl -fsSL https://raw.githubusercontent.com/j-irvine/offline-kit/main/install.sh | bash -s -- --app-only
+    ```
+- **Update the library** (about once a year): do the same without `--app-only` at the end. It downloads newer versions of the collections and removes the old ones. This can be a large download.
 - **Change size:** paste this into Terminal, with the size you want at the end (`essentials`, `standard` or `complete`):
   ```
   bash ~/OfflineKit/kit/install.sh --tier essentials

@@ -221,7 +221,10 @@ class ServerTest(unittest.TestCase):
     def test_random(self):
         code, headers, _ = get(self.base, "/api/random?book=wikipedia_en_test")
         self.assertEqual(code, 302)
-        self.assertEqual(get(self.base, headers["Location"])[0], 200)
+        code, headers, _ = get(self.base, headers["Location"])
+        if code == 302:  # the random page can itself be a redirect to another article
+            code = get(self.base, headers["Location"])[0]
+        self.assertEqual(code, 200)
 
     # ---- search
     def test_search(self):
@@ -701,6 +704,32 @@ class SetupTest(unittest.TestCase):
         self.assertEqual(self.run_main("--tier", "essentials"), 0)
         self.assertEqual(self.names(), ["my_own_file.zim", "wikipedia_en_all_mini_2026-02.zim",
                                         "zimgit-test_en_2026-02.zim"])
+
+    def test_app_only_update_leaves_the_library_alone(self):
+        self.run_main("--tier", "essentials")
+        old = self.lib / "wikipedia_en_all_mini_2026-02.zim"
+        # A newer version is out, the server is unreachable, and a collection from another size is present.
+        fakes.FakeKiwix.files["wikipedia/wikipedia_en_all_mini_2026-09.zim"] = blob("newer", 1000)
+        (self.lib / "wikipedia_en_all_nopic_2026-01.zim").write_bytes(b"other size")
+        before = self.names()
+        fakes.FakeKiwix.hits.clear()
+        fakes.FakeOllama.pulled.clear()
+        saved, setup.MIRROR = setup.MIRROR, f"http://127.0.0.1:{free_port()}/zim"
+        try:
+            self.assertEqual(self.run_main("--app-only"), 0)
+        finally:
+            setup.MIRROR = saved
+        self.assertEqual(fakes.FakeKiwix.hits, [])
+        self.assertEqual(fakes.FakeOllama.pulled, [], "the model is already there")
+        self.assertEqual(self.names(), before)
+        self.assertTrue(old.exists())
+        self.assertIn("has been updated", self.out.getvalue())
+        self.assertTrue(os.access(KIT / "Update Offline Kit.command", os.X_OK))
+        subprocess.run(["bash", "-n", str(KIT / "Update Offline Kit.command")], check=True)
+
+    def test_app_only_on_a_new_mac_is_a_normal_install(self):
+        self.assertEqual(self.run_main("--app-only", "--tier", "essentials"), 0)
+        self.assertEqual(self.names(), ["wikipedia_en_all_mini_2026-02.zim", "zimgit-test_en_2026-02.zim"])
 
     def test_nothing_is_removed_when_a_download_fails(self):
         self.run_main("--tier", "essentials")

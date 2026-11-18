@@ -7,6 +7,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/j-irvine/offline-kit/main/install.sh | bash
 #
 # It is safe to run again: finished downloads are kept, partial ones resume.
+# Add --app-only to update just the program and leave the library as it is.
 # Everything goes in ~/OfflineKit. Deleting that folder (and the Desktop
 # shortcut) removes it completely.
 set -euo pipefail
@@ -51,7 +52,7 @@ elif [ -z "$SRC_DIR" ]; then
   bold "Downloading the kit"
   TMP="$(mktemp -d)"
   curl -fsSL "https://github.com/$REPO/archive/refs/heads/$BRANCH.tar.gz" | tar xz -C "$TMP" \
-    || fail "couldn't download the kit. Check your internet connection and try again."
+    || fail "couldn't download the kit. Check your internet connection. If the repository is private, download the ZIP from GitHub instead (see README.md)."
   rm -rf "$KIT/kit" && mv "$TMP"/*/ "$KIT/kit" && rm -rf "$TMP"
 fi
 
