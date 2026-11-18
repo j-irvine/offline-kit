@@ -9,6 +9,7 @@ Indexes live in library/.pdfindex/<zim file name>.sqlite and are rebuilt
 automatically when a collection is updated (the file name changes).
 """
 
+import contextlib
 import io
 import logging
 import re
@@ -76,6 +77,19 @@ def _title_for(reader, path):
     return title or Path(path).stem
 
 
+def _relaxed_limits():
+    """pypdf refuses unusually structured PDFs as a guard against hostile files.
+
+    The library's PDFs are trusted, and some old manuals are built in ways that
+    trip the default guard, so allow much deeper structures.
+    """
+    try:
+        from pypdf import apply_configuration
+        return apply_configuration(page_tree_maximum_depth=100_000, outline_maximum_depth=10_000)
+    except Exception:  # an older or newer pypdf without this setting
+        return contextlib.nullcontext()
+
+
 def build(archive, zim_path, library_dir, log=print):
     """Extract every PDF's text into the index for this collection. Safe to call repeatedly."""
     from pypdf import PdfReader
@@ -89,8 +103,10 @@ def build(archive, zim_path, library_dir, log=print):
         dest.parent.mkdir(parents=True, exist_ok=True)
         # Remove indexes for older versions of this collection.
         prefix = re.sub(r"_\d{4}-\d{2}[a-z]?$", "", Path(zim_path).stem)
-        for old in dest.parent.glob(prefix + "_*.sqlite"):
-            old.unlink()
+        old_index = re.compile(rf"^{re.escape(prefix)}_\d{{4}}-\d{{2}}[a-z]?(\.v\d+)?\.(sqlite|tmp)$")
+        for old in dest.parent.iterdir():
+            if old_index.match(old.name):
+                old.unlink()
         tmp = dest.with_suffix(".tmp")
         tmp.unlink(missing_ok=True)
         db = sqlite3.connect(tmp)
@@ -105,16 +121,17 @@ def build(archive, zim_path, library_dir, log=print):
                 item = entry.get_item()
                 if item.mimetype != "application/pdf":
                     continue
-                reader = PdfReader(io.BytesIO(bytes(item.content)))
-                title = _title_for(reader, entry.path)
-                rows = []
-                for n, page in enumerate(reader.pages, 1):
-                    try:
-                        text = re.sub(r"[ \t]+", " ", page.extract_text() or "").strip()
-                    except Exception:
-                        continue
-                    if len(text) > 40:
-                        rows.append((title, text, entry.path, n))
+                with _relaxed_limits():
+                    reader = PdfReader(io.BytesIO(bytes(item.content)))
+                    title = _title_for(reader, entry.path)
+                    rows = []
+                    for n, page in enumerate(reader.pages, 1):
+                        try:
+                            text = re.sub(r"[ \t]+", " ", page.extract_text() or "").strip()
+                        except Exception:
+                            continue
+                        if len(text) > 40:
+                            rows.append((title, text, entry.path, n))
                 db.executemany("INSERT INTO pages VALUES (?, ?, ?, ?)", rows)
                 docs += 1
                 pages += len(rows)
@@ -146,19 +163,32 @@ class PdfSearch:
         words = [w for w in words if w]
         if not words or not self.dbs:
             return []
-        match = " OR ".join(f'"{w}"' for w in words)
-        hits = []
-        for book_id, path in self.dbs.items():
-            try:
-                db = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
-                rows = db.execute(
-                    "SELECT title, text, path, page, bm25(pages, 4.0, 1.0) AS score FROM pages "
-                    "WHERE pages MATCH ? ORDER BY score LIMIT ?", (match, limit)).fetchall()
-                db.close()
-            except sqlite3.Error:
-                continue
-            for title, text, zpath, page, score in rows:
-                hits.append({"book": book_id, "title": title, "text": text, "path": zpath,
-                             "page": page, "score": -score})
-        hits.sort(key=lambda h: -h["score"])
-        return hits[:limit]
+        # For a short search, pages containing all the words come first; pages
+        # containing only some of them fill the remaining places.
+        matches = [" OR ".join(f'"{w}"' for w in words)]
+        if 1 < len(words) <= 5:
+            matches.insert(0, " AND ".join(f'"{w}"' for w in words))
+        out, seen = [], set()
+        for match in matches:
+            hits = []
+            for book_id, path in self.dbs.items():
+                try:
+                    db = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+                    rows = db.execute(
+                        "SELECT title, text, path, page, bm25(pages, 4.0, 1.0) AS score FROM pages "
+                        "WHERE pages MATCH ? ORDER BY score LIMIT ?", (match, limit)).fetchall()
+                    db.close()
+                except sqlite3.Error:
+                    continue
+                for title, text, zpath, page, score in rows:
+                    hits.append({"book": book_id, "title": title, "text": text, "path": zpath,
+                                 "page": page, "score": -score})
+            hits.sort(key=lambda h: -h["score"])
+            for h in hits:
+                key = (h["book"], h["path"], h["page"])
+                if key not in seen:
+                    seen.add(key)
+                    out.append(h)
+            if len(out) >= limit:
+                break
+        return out[:limit]

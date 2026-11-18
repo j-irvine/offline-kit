@@ -13,6 +13,7 @@ It's meant for when the internet is down for a long time. Set it up now, while y
 
 - A Mac with an Apple processor (M1, M2, M3, M4 or later). [How to check](https://support.apple.com/en-us/116943)
   - Older Intel Macs work, but the assistant will be very slow.
+- **macOS 14 (Sonoma) or newer.** To check, click the Apple menu, then **About This Mac**. The installer stops with a message if the Mac is too old.
 - **16 GB of memory** is recommended. 8 GB works, with a smaller and less capable assistant.
 - Free disk space for the size you choose:
 
@@ -40,6 +41,7 @@ The installer checks your free space and recommends a size that fits.
 6. **Wait.** The download is large and can take a few hours. You can keep using your Mac, but keep it plugged in and leave the Terminal window open.
    - **If it gets interrupted** (Wi-Fi drops, the Mac restarts, you close the window), paste the line from step 4 again. It continues where it left off.
 7. When it says **All set!**, you're done. You can delete the `offline-kit-main` folder and the ZIP from Downloads.
+   - If it says **Almost done** instead, it lists what didn't finish. Paste the line from step 4 again to retry those parts. What did download is ready to use.
 
 ## Use it
 
@@ -47,7 +49,9 @@ Double-click **Offline Kit** on your Desktop (the green icon with a book). A Ter
 
 - **Ask** tab: type a question the way you'd search Google. Answers include numbered links to the articles they came from. Click them to read the source.
 - **Library** tab: search and read everything directly, like a website.
-- **Keep the Terminal window open** while you use it. Close that window when you're done.
+- **Keep the Terminal window open** while you use it. Close that window when you're done. That frees the memory the AI uses.
+- If you double-click the icon while Offline Kit is already running, it opens the page again and changes nothing else.
+- The Library tab works even if the AI part has a problem.
 
 **Try it now with Wi-Fi turned off,** so you know it works before you need it.
 
@@ -66,12 +70,16 @@ Double-click **Offline Kit** on your Desktop (the green icon with a book). A Ter
   ```
   bash ~/OfflineKit/kit/install.sh --tier essentials
   ```
+  When everything for the new size has downloaded, collections that belong only to the old size are removed (for example, the Wikipedia summaries are replaced by the full Wikipedia). Files you added to the library folder yourself are left alone.
 - **Remove:** drag the **OfflineKit** folder in your home folder and the **Offline Kit** Desktop shortcut to the Trash. Nothing else was changed on your Mac.
 
 ## Troubleshooting
 
+- **Offline Kit needs macOS 14:** update macOS (Apple menu → System Settings → General → Software Update), then run the installer again.
 - **"Not enough space":** free up space (Apple menu → System Settings → General → Storage), then run the installer again. You can also choose a smaller size.
 - **The page says the AI engine isn't running:** close the Offline Kit Terminal window and double-click Offline Kit again.
+- **The page says the model isn't installed:** the AI download didn't finish. Connect to the internet and run the installer again. The Library tab still works in the meantime.
+- **The Terminal window says Offline Kit could not start:** it shows the reason from the log. Close the window and try again. If it keeps happening, run the installer again while you have internet.
 - **Answers are slow:** the first question after starting takes longer while the assistant loads. Slower answers are normal on 8 GB Macs. Turning off **Think longer** makes answers faster.
 - **Something else:** the logs are `ollama.log` and `server.log` in the OfflineKit folder in your home folder. Send them to whoever shared this with you.
 
@@ -85,6 +93,8 @@ Double-click **Offline Kit** on your Desktop (the green icon with a book). A Ter
 - **Answering a question:** the model first turns your question into search queries. The app searches the whole library, picks the most relevant paragraphs, and the model answers from those paragraphs with citations (`app/server.py`).
 - **Self-contained:** everything lives in `~/OfflineKit`: a private copy of Python (via [uv](https://github.com/astral-sh/uv)), Ollama, the model and the library. Nothing is installed system-wide, and nothing runs in the background when the app is closed.
 - **Private:** the app only listens on your own computer (`127.0.0.1`) and never contacts the internet.
+
+- **Self-test:** `~/OfflineKit/venv/bin/python ~/OfflineKit/kit/tests/run_tests.py` checks the installer logic, the server, search and the chat pipeline against a tiny made-up library and stand-in services. It needs no internet and doesn't touch your installation. Run it after changing the code. It does not replace trying the real thing with Wi-Fi off.
 
 ```
 ~/OfflineKit/

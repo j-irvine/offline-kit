@@ -19,10 +19,12 @@ import json
 import math
 import mimetypes
 import re
+import subprocess
 import sys
 import threading
 import time
 import traceback
+import urllib.error
 import urllib.parse
 import urllib.request
 from collections import Counter, defaultdict
@@ -122,19 +124,22 @@ class Library:
         books = [self.books[i] for i in (book_ids or []) if i in self.books] or self.ordered
         books = [b for b in books if b.searchable]
         if not books or not q.strip():
-            return 0, []
+            return 0, [], 0
         searcher = Searcher(books[0].archive)
         for b in books[1:]:
             searcher.add_archive(b.archive)
         search = searcher.search(Query().set_query(q))
         total = search.get_estimated_matches()
-        out = []
+        out, seen = [], 0
         for r in search.get_results(start, count):
+            seen += 1
             b = self.book_of(r.archive)
             if b and not NOISE_PATH.match(r.path):
                 out.append({"book": b.id, "bookTitle": b.title, "path": r.path,
                             "title": r.title or r.path, "snippet": clean_snippet(r.snippet)})
-        return total, out
+        # `seen` is how many results the index returned, including filtered-out ones;
+        # the next page starts after them.
+        return total, out, start + seen
 
     def suggest(self, q, count=8):
         out = []
@@ -178,7 +183,7 @@ def clean_snippet(s):
 
 BLOCK_TAGS = {"p", "li", "dd", "dt", "tr", "blockquote", "pre", "h1", "h2", "h3", "h4", "h5", "h6",
               "div", "section", "td", "th", "caption", "figcaption", "br"}
-SKIP_TAGS = {"script", "style", "sup", "noscript", "button", "nav", "footer", "math", "svg"}
+SKIP_TAGS = {"head", "title", "script", "style", "sup", "noscript", "button", "nav", "footer", "math", "svg"}
 END_SECTIONS = {"references", "external links", "see also", "notes", "further reading",
                 "bibliography", "sources", "citations", "footnotes", "notes and references"}
 
@@ -302,17 +307,38 @@ def retrieve(library, question, queries, max_docs=16, word_budget=1800, per_doc=
     """Find the passages in the library most relevant to the question."""
     t0 = time.time()
     candidates = {}
-    for qi, q in enumerate(queries):
+
+    def run(q, weight):
         try:
-            _, results = library.search(q, count=8)
+            _, results, _ = library.search(q, count=8)
         except Exception as e:
             log("search failed:", q, e)
-            continue
+            return
         for rank, r in enumerate(results):
             key = (r["book"], r["path"])
-            prior = 1.0 / (rank + 1) * (1.0 if qi == 0 else 0.8)
+            prior = weight / (rank + 1)
             if key not in candidates or candidates[key]["prior"] < prior:
                 candidates[key] = dict(r, prior=prior, key=key)
+
+    for qi, q in enumerate(queries):
+        run(q, 1.0 if qi == 0 else 0.8)
+    if len(candidates) < 5:
+        # The library's search only returns pages containing every word of a query,
+        # so a wordy query can find nothing. Try again with one word left out, then
+        # with pairs of words.
+        tried, looser = {q.lower() for q in queries}, []
+        for q in queries:
+            words = [w for w in q.split() if w.lower() not in STOPWORDS] or q.split()
+            if len(words) >= 3:
+                looser += [" ".join(words[:i] + words[i + 1:]) for i in range(len(words))]
+            if len(words) >= 4:
+                looser += [" ".join(words[i:i + 2]) for i in range(len(words) - 1)]
+        for q in looser[:24]:
+            if q.lower() not in tried:
+                tried.add(q.lower())
+                run(q, 0.5)
+            if len(candidates) >= 12:
+                break
     docs = sorted(candidates.values(), key=lambda d: -d["prior"])[:max_docs]
     t1 = time.time()
     pool = []
@@ -439,6 +465,19 @@ Use the conversation to resolve words like "it" or "that". Prefer standard encyc
 Reply with JSON only: {"queries": ["...", "..."]}"""
 
 
+def keep_awake():
+    """Stop the Mac from going to sleep while an answer is being written.
+
+    Held only for the length of one answer (30 minutes at most), so leaving
+    Offline Kit open doesn't drain the battery.
+    """
+    try:
+        return subprocess.Popen(["caffeinate", "-i", "-t", "1800"],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError:
+        return None
+
+
 def ollama_up():
     try:
         urllib.request.urlopen(OLLAMA + "/api/version", timeout=1.5)
@@ -453,6 +492,20 @@ def ollama_models():
             return [m["name"] for m in json.load(r).get("models", [])]
     except OSError:
         return []
+
+
+def model_installed(model, installed):
+    full = lambda m: m if ":" in m.rsplit("/", 1)[-1] else m + ":latest"
+    return bool(model) and full(model) in {full(m) for m in installed}
+
+
+def ollama_error(e):
+    """A readable message from an Ollama HTTP error."""
+    try:
+        detail = json.loads(e.read()).get("error", "")
+    except Exception:
+        detail = ""
+    return detail or str(e)
 
 
 def ollama_chat(model, messages, stream=True, think=False, fmt=None, options=None, timeout=600):
@@ -479,7 +532,7 @@ def make_queries(model, history, question):
               "required": ["queries"]}
     try:
         with ollama_chat(model, msgs, stream=False, fmt=schema,
-                         options={"temperature": 0, "num_predict": 80}, timeout=60) as r:
+                         options={"temperature": 0, "num_predict": 80}, timeout=120) as r:
             content = json.load(r)["message"]["content"]
         qs = [q.strip() for q in json.loads(content).get("queries", []) if isinstance(q, str) and q.strip()]
     except Exception as e:
@@ -559,7 +612,7 @@ class Handler(BaseHTTPRequestHandler):
                 up = ollama_up()
                 model = cfg.get("model", "")
                 return self.send_json({"books": len(self.library.books), "model": model, "ollama": up,
-                                       "modelReady": up and model in ollama_models()})
+                                       "modelReady": up and model_installed(model, ollama_models())})
             if path == "/api/books":
                 return self.send_json([b.info() for b in self.library.ordered])
             if path == "/api/illustration":
@@ -572,8 +625,11 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(404)
             if path == "/api/search":
                 books = [x for x in arg("book").split(",") if x]
-                start = int(arg("start", "0") or 0)
-                total, results = self.library.search(arg("q"), books, start, 20)
+                try:
+                    start = max(0, int(arg("start", "0") or 0))
+                except ValueError:
+                    start = 0
+                total, results, nxt = self.library.search(arg("q"), books, start, 20)
                 pdfs = []
                 if start == 0:
                     words = [t for t in re.findall(r"[a-z0-9]+", arg("q").lower()) if t not in STOPWORDS]
@@ -587,7 +643,8 @@ class Handler(BaseHTTPRequestHandler):
                                      "url": f"/content/{b.id}/{urllib.parse.quote(h['path'])}#page={h['page']}"})
                         if len(pdfs) == 5:
                             break
-                return self.send_json({"total": total, "results": results, "pdfs": pdfs})
+                return self.send_json({"total": total, "results": results, "pdfs": pdfs,
+                                       "next": nxt if nxt < total and nxt > start else None})
             if path == "/api/suggest":
                 return self.send_json(self.library.suggest(arg("q")))
             if path == "/api/random":
@@ -609,9 +666,11 @@ class Handler(BaseHTTPRequestHandler):
             n = int(self.headers.get("Content-Length") or 0)
             try:
                 req = json.loads(self.rfile.read(n) or b"{}")
-            except ValueError:
+                messages = [{"role": m["role"], "content": str(m["content"])} for m in req["messages"]
+                            if m.get("role") in ("user", "assistant") and m.get("content")]
+            except (ValueError, KeyError, TypeError, AttributeError):
                 return self.send(400, "Bad request")
-            return self.chat(req)
+            return self.chat(req, messages)
         self.send(404, "Not found")
 
     # ---- static files
@@ -652,8 +711,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(f"data: {json.dumps(dict(type=kind, **data))}\n\n".encode())
         self.wfile.flush()
 
-    def chat(self, req):
-        messages = [m for m in req.get("messages", []) if m.get("role") in ("user", "assistant")]
+    def chat(self, req, messages):
         if not messages or messages[-1]["role"] != "user":
             return self.send(400, "No question")
         question = messages[-1]["content"].strip()
@@ -666,6 +724,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-cache")
         self.end_headers()
+        awake = keep_awake()
         try:
             if not ollama_up():
                 return self.event("error", text="The AI engine isn't running. Close Offline Kit and start it again.")
@@ -691,7 +750,23 @@ class Handler(BaseHTTPRequestHandler):
                 content = question
             msgs.append({"role": "user", "content": content})
 
-            with ollama_chat(model, msgs, think=think) as r:
+            if not model:
+                return self.event("error", text="No AI model is set up yet. Connect to the internet and run the "
+                                  "installer again. The Library tab works without it.")
+            try:
+                r = ollama_chat(model, msgs, think=think)
+            except urllib.error.HTTPError as e:
+                detail = ollama_error(e)
+                log("chat: ollama refused:", e.code, detail)
+                if think and "think" in detail.lower():
+                    # This model can't show its reasoning; answer normally instead.
+                    r = ollama_chat(model, msgs, think=False)
+                elif e.code == 404:
+                    return self.event("error", text=f"The AI model ({model}) isn't installed. Connect to the "
+                                      "internet and run the installer again. The Library tab works without it.")
+                else:
+                    return self.event("error", text=f"The AI engine reported a problem: {detail}")
+            with r:
                 for line in r:
                     msg = json.loads(line)
                     if "error" in msg:
@@ -713,6 +788,10 @@ class Handler(BaseHTTPRequestHandler):
                 self.event("error", text=f"Something went wrong: {e}")
             except Exception:
                 pass
+        finally:
+            if awake:
+                awake.terminate()
+                awake.wait()
 
 
 def main():
@@ -720,8 +799,12 @@ def main():
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--host", default="127.0.0.1")
     args = ap.parse_args()
+    try:
+        server = ThreadingHTTPServer((args.host, args.port), Handler)
+    except OSError as e:
+        log(f"couldn't start on port {args.port}: {e}")
+        sys.exit(2)
     Handler.library = Library(LIBRARY)
-    server = ThreadingHTTPServer((args.host, args.port), Handler)
     server.daemon_threads = True
     log(f"serving on http://{args.host}:{args.port}")
     server.serve_forever()

@@ -54,14 +54,24 @@ function markdown(src) {
     let m;
     if ((m = line.match(/^(#{1,6})\s+(.*)/))) { const n = Math.min(m[1].length + 1, 4); out += `<h${n}>${inline(m[2])}</h${n}>`; i++; continue; }
     if (/^\s*[-*+]\s+/.test(line) || /^\s*\d+[.)]\s+/.test(line)) {
+      // Items keep the numbers the AI wrote, so steps separated by blank lines
+      // don't all restart at 1. Bullets under a numbered step become a sub-list.
       const ordered = /^\s*\d+[.)]\s+/.test(line); const items = [];
-      while (i < lines.length && (/^\s*([-*+]|\d+[.)])\s+/.test(lines[i]) || (/^\s{2,}\S/.test(lines[i]) && items.length))) {
-        if (/^\s*([-*+]|\d+[.)])\s+/.test(lines[i])) items.push(lines[i].replace(/^\s*([-*+]|\d+[.)])\s+/, ""));
-        else items[items.length - 1] += " " + lines[i].trim();
+      while (i < lines.length) {
+        const im = lines[i].match(/^(\s*)(?:[-*+]|(\d+)[.)])\s+(.*)$/);
+        if (im) {
+          if (ordered && !im[2]) items[items.length - 1].sub.push(im[3]);
+          else if (!ordered && im[2] && !im[1]) break;  // a numbered list starts after the bullets
+          else items.push({ n: im[2], text: im[3], sub: [] });
+        } else if (/^\s{2,}\S/.test(lines[i])) {
+          const last = items[items.length - 1];
+          if (last.sub.length) last.sub[last.sub.length - 1] += " " + lines[i].trim(); else last.text += " " + lines[i].trim();
+        } else break;
         i++;
       }
       const tag = ordered ? "ol" : "ul";
-      out += `<${tag}>${items.map((x) => `<li>${inline(x)}</li>`).join("")}</${tag}>`; continue;
+      out += `<${tag}>${items.map((x) => `<li${ordered ? ` value="${Number(x.n)}"` : ""}>${inline(x.text)}${
+        x.sub.length ? `<ul>${x.sub.map((y) => `<li>${inline(y)}</li>`).join("")}</ul>` : ""}</li>`).join("")}</${tag}>`; continue;
     }
     if (/^\s*\|.*\|\s*$/.test(line) && i + 1 < lines.length && /^\s*\|?\s*:?-{2,}/.test(lines[i + 1])) {
       const row = (l) => l.trim().replace(/^\||\|$/g, "").split("|").map((c) => inline(c.trim()));
@@ -94,8 +104,14 @@ let chats = store.get("chats", []);   // [{id, title, messages:[{role, content, 
 let current = null;
 let controller = null;
 
-function saveChats() { store.set("chats", chats.slice(0, 100)); }
+function saveChats() {
+  // Browsers limit how much a page can store. If it's full, drop the oldest chats.
+  for (let keep = Math.min(chats.length, 100); keep >= 0; keep = keep > 1 ? Math.floor(keep / 2) : keep - 1) {
+    try { localStorage.setItem("chats", JSON.stringify(chats.slice(0, keep))); return; } catch { /* full or unavailable */ }
+  }
+}
 function newChat() {
+  if (controller) controller.abort();
   current = null;
   $("#thread").innerHTML = "";
   $("#thread").appendChild(welcomeEl);
@@ -103,6 +119,7 @@ function newChat() {
   $("#question").focus();
 }
 function openChat(id) {
+  if (controller && !(current && current.id === id)) controller.abort();
   current = chats.find((c) => c.id === id) || null;
   if (!current) return newChat();
   $("#thread").innerHTML = "";
@@ -227,6 +244,7 @@ async function ask(question) {
   } finally {
     controller = null;
     $("#send").hidden = false; $("#stop").hidden = true;
+    if (!reply.content && !reply.error && !reply.stopped) reply.error = "The answer stopped unexpectedly. Please ask again.";
     const s = reply.stats;
     meta.textContent = s && s.tokens && s.seconds ? `${Math.round(s.tokens / s.seconds)} words/sec` : "";
     fillAssistant(el, reply);
@@ -241,7 +259,11 @@ q.addEventListener("input", autosize);
 q.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("#ask-form").requestSubmit(); }
 });
-$("#ask-form").addEventListener("submit", (e) => { e.preventDefault(); const v = q.value; q.value = ""; autosize(); ask(v); });
+$("#ask-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  if (controller || !q.value.trim()) return;  // still answering: keep what was typed
+  const v = q.value; q.value = ""; autosize(); ask(v);
+});
 $("#stop").addEventListener("click", () => controller && controller.abort());
 $("#new-chat").addEventListener("click", newChat);
 document.querySelectorAll(".example").forEach((b) => b.addEventListener("click", () => ask(b.textContent)));
@@ -257,8 +279,12 @@ const fmtNum = (n) => n >= 1e6 ? (n / 1e6).toFixed(1) + " million" : n >= 1e3 ? 
 
 async function loadBooks() {
   if (booksLoaded) return;
+  let books;
+  try { books = await (await fetch("/api/books")).json(); } catch {
+    $("#books").innerHTML = `<p class="empty">Couldn't load the library. Is the Offline Kit window still open?</p>`;
+    return;
+  }
   booksLoaded = true;
-  const books = await (await fetch("/api/books")).json();
   const sel = $("#search-book");
   books.forEach((b) => { const o = document.createElement("option"); o.value = b.id; o.textContent = b.title; sel.appendChild(o); });
   const want = new URLSearchParams(location.search).get("book");
@@ -275,7 +301,16 @@ async function search(qs, book, start = 0) {
   $("#suggestions").hidden = true;
   if (!qs.trim()) { box.innerHTML = ""; return; }
   if (!start) box.innerHTML = `<p class="empty">Searching…</p>`;
-  const data = await (await fetch(`/api/search?q=${encodeURIComponent(qs)}&book=${encodeURIComponent(book)}&start=${start}`)).json();
+  let data;
+  try {
+    const res = await fetch(`/api/search?q=${encodeURIComponent(qs)}&book=${encodeURIComponent(book)}&start=${start}`);
+    if (!res.ok) throw new Error(res.status);
+    data = await res.json();
+  } catch {
+    const msg = `<p class="empty">The search didn't work. Is the Offline Kit window still open? Try again.</p>`;
+    if (!start) box.innerHTML = msg; else { $(".more", box)?.remove(); box.insertAdjacentHTML("beforeend", msg); }
+    return;
+  }
   const html = data.results.map((r) => `
     <div class="result">
       <a href="/content/${encodeURIComponent(r.book)}/${r.path.split("/").map(encodeURIComponent).join("/")}" target="_blank">${esc(r.title)}</a>
@@ -293,9 +328,9 @@ async function search(qs, book, start = 0) {
       (data.results.length ? `<p class="from">About ${fmtNum(data.total)} results</p>` + html : (pdfHtml ? "" : `<p class="empty">No results. Try different words.</p>`));
   }
   else { $(".more", box)?.remove(); box.insertAdjacentHTML("beforeend", html); }
-  if (start + data.results.length < data.total && data.results.length) {
+  if (data.next) {
     box.insertAdjacentHTML("beforeend", `<button class="btn more">More results</button>`);
-    $(".more", box).onclick = () => search(qs, book, start + data.results.length);
+    $(".more", box).onclick = () => search(qs, book, data.next);
   }
 }
 $("#search-form").addEventListener("submit", (e) => { e.preventDefault(); search($("#search-q").value, $("#search-book").value); });
@@ -306,7 +341,8 @@ $("#search-q").addEventListener("input", (e) => {
   const v = e.target.value.trim();
   if (v.length < 2) { $("#suggestions").hidden = true; return; }
   suggestTimer = setTimeout(async () => {
-    const items = await (await fetch("/api/suggest?q=" + encodeURIComponent(v))).json();
+    let items = [];
+    try { items = await (await fetch("/api/suggest?q=" + encodeURIComponent(v))).json(); } catch { /* server stopped */ }
     const ul = $("#suggestions");
     ul.innerHTML = items.map((s) => `<li><a href="/content/${encodeURIComponent(s.book)}/${s.path.split("/").map(encodeURIComponent).join("/")}" target="_blank">${esc(s.title)}<span>${esc(s.bookTitle)}</span></a></li>`).join("");
     ul.hidden = !items.length;

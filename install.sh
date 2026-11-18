@@ -28,6 +28,12 @@ case "$(uname -m)" in
   *) fail "unsupported processor: $(uname -m)" ;;
 esac
 
+# The AI engine and the library reader both need macOS 14 (Sonoma) or newer.
+MACOS="$(sw_vers -productVersion 2>/dev/null || echo 0)"
+if [ "${MACOS%%.*}" -lt 14 ] 2>/dev/null; then
+  fail "Offline Kit needs macOS 14 (Sonoma) or newer. This Mac has macOS $MACOS. Update it in System Settings > General > Software Update, then run this again."
+fi
+
 bold "Setting up Offline Kit in $KIT"
 mkdir -p "$KIT/bin" "$KIT/library" "$KIT/models"
 
@@ -51,23 +57,50 @@ fi
 
 # 2. Python (a private copy, managed by uv; nothing touches the system Python).
 export UV_PYTHON_INSTALL_DIR="$KIT/python" UV_CACHE_DIR="$KIT/.cache/uv" UV_NO_CONFIG=1
+# Downloads are unpacked into a temporary folder and moved into place only when
+# complete, so an interrupted install never leaves a half-written program behind.
 if [ ! -x "$KIT/bin/uv" ]; then
   bold "Installing Python tools"
+  rm -rf "$KIT/bin/.new" && mkdir -p "$KIT/bin/.new"
   curl -fsSL "https://github.com/astral-sh/uv/releases/latest/download/uv-$UV_ARCH.tar.gz" \
-    | tar xz -C "$KIT/bin" --strip-components 1 || fail "couldn't download uv."
+    | tar xz -C "$KIT/bin/.new" --strip-components 1 \
+    || fail "couldn't download the Python tools (uv). Check your internet connection and try again."
+  mv -f "$KIT/bin/.new/uv" "$KIT/bin/uv" && rm -rf "$KIT/bin/.new"
 fi
-if [ ! -x "$KIT/venv/bin/python" ]; then
-  "$KIT/bin/uv" venv --quiet --python "$PY_VERSION" --managed-python "$KIT/venv"
+python_works() { [ "$("$KIT/venv/bin/python" -c 'print(6 * 7)' 2>/dev/null)" = "42" ]; }
+if ! python_works; then
+  rm -rf "$KIT/venv"
+  if ! "$KIT/bin/uv" venv --quiet --python "$PY_VERSION" --managed-python "$KIT/venv" || ! python_works; then
+    # The private copy of Python may be damaged; fetch it again.
+    rm -rf "$KIT/venv" "$KIT/python"
+    "$KIT/bin/uv" venv --quiet --python "$PY_VERSION" --managed-python "$KIT/venv" \
+      || fail "couldn't install Python. Check your internet connection and try again."
+  fi
 fi
-"$KIT/bin/uv" pip install --quiet --python "$KIT/venv/bin/python" "libzim==$LIBZIM_VERSION" "pypdf==$PYPDF_VERSION"
+"$KIT/bin/uv" pip install --quiet --python "$KIT/venv/bin/python" "libzim==$LIBZIM_VERSION" "pypdf==$PYPDF_VERSION" \
+  || fail "couldn't install the library reader. Check your internet connection and try again."
+"$KIT/venv/bin/python" -c "import libzim.reader, libzim.search, pypdf" \
+  || fail "the library reader didn't install correctly. Delete the folder $KIT/venv and run this again."
 
 # 3. Ollama, which runs the AI model. We keep a private copy so it doesn't
 #    interfere with any Ollama you already have.
-if [ ! -x "$KIT/ollama/ollama" ]; then
+#    It is refreshed when a newer version is out, because newer AI models need it.
+OLLAMA_LATEST="$(curl -fsSLI -o /dev/null -w '%{url_effective}' --max-time 20 \
+  "https://github.com/ollama/ollama/releases/latest" 2>/dev/null | sed 's|.*/||' || true)"
+case "$OLLAMA_LATEST" in v[0-9]*) ;; *) OLLAMA_LATEST="" ;; esac
+OLLAMA_HAVE="$(cat "$KIT/ollama/.version" 2>/dev/null || true)"
+if [ ! -x "$KIT/ollama/ollama" ] || { [ -n "$OLLAMA_LATEST" ] && [ "$OLLAMA_LATEST" != "$OLLAMA_HAVE" ]; }; then
   bold "Installing Ollama (the AI engine, ~190 MB)"
-  mkdir -p "$KIT/ollama"
-  curl -fL --progress-bar "https://github.com/ollama/ollama/releases/latest/download/ollama-darwin.tgz" \
-    | tar xz -C "$KIT/ollama" || fail "couldn't download Ollama."
+  rm -rf "$KIT/ollama.new" && mkdir -p "$KIT/ollama.new"
+  if curl -fL --progress-bar --retry 3 "https://github.com/ollama/ollama/releases/latest/download/ollama-darwin.tgz" \
+      | tar xz -C "$KIT/ollama.new" && [ -x "$KIT/ollama.new/ollama" ]; then
+    printf '%s\n' "$OLLAMA_LATEST" > "$KIT/ollama.new/.version"
+    rm -rf "$KIT/ollama" && mv "$KIT/ollama.new" "$KIT/ollama"
+  else
+    rm -rf "$KIT/ollama.new"
+    [ -x "$KIT/ollama/ollama" ] || fail "couldn't download Ollama. Check your internet connection and try again."
+    echo "Couldn't download the newer Ollama; keeping the one already installed."
+  fi
 fi
 
 # 4. Everything else (choosing a size, downloading the library and the model,
